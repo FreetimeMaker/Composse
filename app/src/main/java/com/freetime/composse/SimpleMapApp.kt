@@ -21,74 +21,89 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.launch
-import org.maplibre.android.geometry.LatLng
-import org.mapsforge.map.android.view.MapView
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HybridMapApp() {
+fun SimpleMapApp() {
     val context = LocalContext.current
     val locationManager = remember { LocationManager(context) }
-    val mapsforgeManager = remember { MapsforgeManager(context) }
     val coroutineScope = rememberCoroutineScope()
     
-    var currentLocation by remember { mutableStateOf<LatLng?>(null) }
+    var currentLocation by remember { mutableStateOf<GeoPoint?>(null) }
     var searchQuery by remember { mutableStateOf("") }
     var showSearch by remember { mutableStateOf(false) }
     var showLayerMenu by remember { mutableStateOf(false) }
-    var showOfflineMenu by remember { mutableStateOf(false) }
-    var selectedMapType by remember { mutableStateOf("online") } // "online" or "offline"
     var selectedStyle by remember { mutableStateOf("streets") }
-    
-    var mapLibreView by remember { mutableStateOf<android.view.View?>(null) }
-    var mapsforgeView by remember { mutableStateOf<MapView?>(null) }
     
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { isGranted ->
         if (isGranted) {
-            // Location will be handled by map views
+            Toast.makeText(context, "Location permission granted", Toast.LENGTH_SHORT).show()
         } else {
             Toast.makeText(context, "Location permission denied", Toast.LENGTH_SHORT).show()
         }
     }
     
-    fun switchMapType(type: String) {
-        selectedMapType = type
-        // Map views will be recreated in recomposition
-    }
-    
     fun searchLocation(query: String) {
-        // Search functionality would use Nominatim API
-        // For now, this is a placeholder
+        // Placeholder for search functionality
+        Toast.makeText(context, "Searching for: $query", Toast.LENGTH_SHORT).show()
     }
     
     Box(modifier = Modifier.fillMaxSize()) {
-        // Map View - Switch between Online and Offline
-        if (selectedMapType == "online") {
-            // MapLibre GL (Online)
-            MapLibreView(
-                modifier = Modifier.fillMaxSize(),
-                onLocationUpdate = { location ->
-                    currentLocation = location
+        // Simple Map View (using WebView as fallback)
+        AndroidView(
+            factory = { ctx ->
+                android.webkit.WebView(ctx).apply {
+                    settings.javaScriptEnabled = true
+                    settings.domStorageEnabled = true
+                    
+                    loadDataWithBaseURL(
+                        null,
+                        """
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <title>Simple Map</title>
+                            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+                            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+                            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+                            <style>
+                                body { margin: 0; padding: 0; }
+                                #map { height: 100vh; width: 100vw; }
+                            </style>
+                        </head>
+                        <body>
+                            <div id="map"></div>
+                            <script>
+                                var map = L.map('map').setView([52.520008, 13.404954], 13);
+                                
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                                    attribution: '© OpenStreetMap contributors',
+                                    maxZoom: 19
+                                }).addTo(map);
+                                
+                                // Add sample markers
+                                L.marker([52.520008, 13.404954])
+                                    .addTo(map)
+                                    .bindPopup('Berlin');
+                                    
+                                L.marker([48.135125, 11.582080])
+                                    .addTo(map)
+                                    .bindPopup('Munich');
+                            </script>
+                        </body>
+                        </html>
+                        """.trimIndent(),
+                        "text/html",
+                        "UTF-8",
+                        null
+                    )
                 }
-            )
-        } else {
-            // Mapsforge (Offline)
-            AndroidView(
-                factory = { ctx ->
-                    coroutineScope.launch {
-                        mapsforgeView = mapsforgeManager.createOfflineMapView()
-                    }
-                    FrameLayout(ctx).apply {
-                        // Placeholder until Mapsforge view is ready
-                        setBackgroundColor(Color.LightGray.toArgb())
-                    }
-                },
-                modifier = Modifier.fillMaxSize()
-            )
-        }
+            },
+            modifier = Modifier.fillMaxSize()
+        )
         
         // Top Search Bar
         if (showSearch) {
@@ -153,15 +168,21 @@ fun HybridMapApp() {
                     modifier = Modifier.padding(16.dp)
                 ) {
                     Text(
-                        text = "Map Type & Style",
+                        text = "Map Styles",
                         fontWeight = FontWeight.Bold,
                         fontSize = 18.sp,
                         modifier = Modifier.padding(bottom = 12.dp)
                     )
                     
-                    // Map Type Selection
-                    Text("Map Source:", fontWeight = FontWeight.Medium)
-                    listOf("online" to "Online (MapLibre)", "offline" to "Offline (Mapsforge)").forEach { (key, name) ->
+                    val styles = mapOf(
+                        "streets" to "Streets",
+                        "satellite" to "Satellite",
+                        "outdoors" to "Outdoors",
+                        "light" to "Light",
+                        "dark" to "Dark"
+                    )
+                    
+                    styles.forEach { (key, name) ->
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -169,9 +190,9 @@ fun HybridMapApp() {
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             RadioButton(
-                                selected = selectedMapType == key,
+                                selected = selectedStyle == key,
                                 onClick = {
-                                    switchMapType(key)
+                                    selectedStyle = key
                                     showLayerMenu = false
                                 }
                             )
@@ -180,42 +201,6 @@ fun HybridMapApp() {
                                 text = name,
                                 modifier = Modifier.weight(1f)
                             )
-                        }
-                    }
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    // Online Map Styles (only show when online)
-                    if (selectedMapType == "online") {
-                        Text("Online Style:", fontWeight = FontWeight.Medium)
-                        val styles = mapOf(
-                            "streets" to "Streets",
-                            "satellite" to "Satellite",
-                            "outdoors" to "Outdoors",
-                            "light" to "Light",
-                            "dark" to "Dark"
-                        )
-                        
-                        styles.forEach { (key, name) ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                RadioButton(
-                                    selected = selectedStyle == key,
-                                    onClick = {
-                                        selectedStyle = key
-                                        showLayerMenu = false
-                                    }
-                                )
-                                Spacer(modifier = Modifier.width(12.dp))
-                                Text(
-                                    text = name,
-                                    modifier = Modifier.weight(1f)
-                                )
-                            }
                         }
                     }
                     
@@ -229,78 +214,7 @@ fun HybridMapApp() {
             }
         }
         
-        // Offline Maps Menu
-        if (showOfflineMenu) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth(0.9f)
-                    .padding(16.dp)
-                    .align(Alignment.TopCenter),
-                shape = RoundedCornerShape(12.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 8.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp)
-                ) {
-                    Text(
-                        text = "Offline Maps",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        modifier = Modifier.padding(bottom = 12.dp)
-                    )
-                    
-                    val availableMaps = mapsforgeManager.getAvailableOfflineMaps()
-                    
-                    if (availableMaps.isEmpty()) {
-                        Text("No offline maps downloaded", color = Color.Gray)
-                        TextButton(
-                            onClick = { 
-                                // TODO: Implement map download
-                                showOfflineMenu = false
-                            }
-                        ) {
-                            Text("Download Maps")
-                        }
-                    } else {
-                        availableMaps.forEach { mapName ->
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 4.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween
-                            ) {
-                                Text(mapName, modifier = Modifier.weight(1f))
-                                IconButton(
-                                    onClick = {
-                                        mapsforgeManager.deleteOfflineMap(mapName)
-                                        showOfflineMenu = false
-                                    }
-                                ) {
-                                    Icon(Icons.Default.Delete, contentDescription = "Delete")
-                                }
-                            }
-                        }
-                    }
-                    
-                    Text(
-                        text = "Storage: ${mapsforgeManager.getOfflineMapSize() / (1024 * 1024)} MB",
-                        fontSize = 12.sp,
-                        color = Color.Gray,
-                        modifier = Modifier.padding(top = 8.dp)
-                    )
-                    
-                    TextButton(
-                        onClick = { showOfflineMenu = false },
-                        modifier = Modifier.align(Alignment.End)
-                    ) {
-                        Text("Close")
-                    }
-                }
-            }
-        }
-        
-        // Bottom Navigation Bar (Enhanced for Hybrid)
+        // Bottom Navigation Bar (Maps.me style)
         Card(
             modifier = Modifier
                 .fillMaxWidth()
@@ -311,7 +225,7 @@ fun HybridMapApp() {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 4.dp, vertical = 12.dp),
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly
             ) {
                 // Search Button
@@ -320,11 +234,11 @@ fun HybridMapApp() {
                 ) {
                     IconButton(
                         onClick = { showSearch = true },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(Icons.Default.Search, contentDescription = "Search")
                     }
-                    Text("Search", fontSize = 9.sp)
+                    Text("Search", fontSize = 10.sp)
                 }
                 
                 // Layers Button
@@ -333,24 +247,11 @@ fun HybridMapApp() {
                 ) {
                     IconButton(
                         onClick = { showLayerMenu = true },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(Icons.Default.Map, contentDescription = "Layers")
+                        Icon(Icons.Default.Menu, contentDescription = "Layers")
                     }
-                    Text("Type", fontSize = 9.sp)
-                }
-                
-                // Offline Maps Button
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    IconButton(
-                        onClick = { showOfflineMenu = true },
-                        modifier = Modifier.size(44.dp)
-                    ) {
-                        Icon(Icons.Default.Download, contentDescription = "Offline")
-                    }
-                    Text("Offline", fontSize = 9.sp)
+                    Text("Styles", fontSize = 10.sp)
                 }
                 
                 // GPS Button (Centered, larger)
@@ -360,21 +261,27 @@ fun HybridMapApp() {
                     FloatingActionButton(
                         onClick = { 
                             if (locationManager.hasLocationPermission()) {
-                                // Location update handled by map views
+                                coroutineScope.launch {
+                                    val location = locationManager.getCurrentLocation()
+                                    location?.let {
+                                        currentLocation = it
+                                        Toast.makeText(context, "Location: ${it.latitude}, ${it.longitude}", Toast.LENGTH_SHORT).show()
+                                    }
+                                }
                             } else {
                                 permissionLauncher.launch(Manifest.permission.ACCESS_FINE_LOCATION)
                             }
                         },
-                        modifier = Modifier.size(52.dp),
+                        modifier = Modifier.size(56.dp),
                         containerColor = MaterialTheme.colorScheme.primary
                     ) {
                         Icon(
-                            Icons.Default.MyLocation,
+                            Icons.Default.LocationOn,
                             contentDescription = "My Location",
                             tint = Color.White
                         )
                     }
-                    Text("GPS", fontSize = 9.sp)
+                    Text("GPS", fontSize = 10.sp)
                 }
                 
                 // Bookmarks Button
@@ -383,11 +290,11 @@ fun HybridMapApp() {
                 ) {
                     IconButton(
                         onClick = { /* TODO: Implement bookmarks */ },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
-                        Icon(Icons.Default.Bookmark, contentDescription = "Bookmarks")
+                        Icon(Icons.Default.Star, contentDescription = "Bookmarks")
                     }
-                    Text("Saved", fontSize = 9.sp)
+                    Text("Saved", fontSize = 10.sp)
                 }
                 
                 // Settings Button
@@ -396,11 +303,11 @@ fun HybridMapApp() {
                 ) {
                     IconButton(
                         onClick = { /* TODO: Implement settings */ },
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(48.dp)
                     ) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
-                    Text("Settings", fontSize = 9.sp)
+                    Text("Settings", fontSize = 10.sp)
                 }
             }
         }

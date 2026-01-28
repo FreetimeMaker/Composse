@@ -3,11 +3,16 @@ package com.freetime.composse
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import androidx.annotation.RequiresPermission
 import androidx.core.content.ContextCompat
 import com.google.android.gms.location.LocationServices
-import kotlinx.coroutines.tasks.await
-import org.osmdroid.util.GeoPoint
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
+
+data class GeoPoint(
+    val latitude: Double,
+    val longitude: Double
+)
 
 class LocationManager(private val context: Context) {
     
@@ -20,14 +25,22 @@ class LocationManager(private val context: Context) {
         ) == PackageManager.PERMISSION_GRANTED
     }
     
-    @RequiresPermission(allOf = [Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION])
     suspend fun getCurrentLocation(): GeoPoint? {
         if (!hasLocationPermission()) return null
         
         return try {
-            val location = fusedLocationClient.lastLocation.await()
-            location?.let {
-                GeoPoint(it.latitude, it.longitude)
+            suspendCancellableCoroutine { continuation ->
+                fusedLocationClient.lastLocation
+                    .addOnSuccessListener { location ->
+                        if (location != null) {
+                            continuation.resume(GeoPoint(location.latitude, location.longitude))
+                        } else {
+                            continuation.resume(null)
+                        }
+                    }
+                    .addOnFailureListener { exception ->
+                        continuation.resumeWithException(exception)
+                    }
             }
         } catch (e: Exception) {
             null
