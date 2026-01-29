@@ -1,6 +1,7 @@
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
+    alias(libs.plugins.kotlin.serialization)
 }
 
 android {
@@ -46,11 +47,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.graphics)
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
-    
+
     // MapLibre GL Native - Online Vector Maps
     implementation("org.maplibre.gl:android-sdk:10.2.0")
     implementation("org.maplibre.gl:android-plugin-annotation-v9:2.0.0")
-    
+
     // Mapsforge - Offline Vector Maps
     implementation("org.mapsforge:mapsforge-core:0.20.0")
     implementation("org.mapsforge:mapsforge-map:0.20.0")
@@ -58,11 +59,17 @@ dependencies {
     implementation("org.mapsforge:mapsforge-map-reader:0.20.0")
     implementation("org.mapsforge:mapsforge-poi-android:0.20.0")
     implementation("org.mapsforge:mapsforge-themes:0.20.0")
-    
+
+    // BRouter - Offline Routing
+    implementation("com.github.abrensch:brouter:1.7.0")
+
     // Additional Mapsforge dependencies
     implementation("net.sf.kxml:kxml2:2.3.0")
     implementation("com.google.android.gms:play-services-location:21.3.0")
-    
+
+    implementation(libs.okhttp)
+    implementation(libs.kotlinx.serialization.json)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
